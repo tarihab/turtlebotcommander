@@ -9,6 +9,10 @@
 
 #define LINVEL_SETPOINT 0.25
 #define ANGVEL_SETPOINT 1.0
+#define LINVEL_STEPSIZE 0.01
+#define ANGVEL_STEPSIZE 0.1
+// the above values can be modified in real time by correspondingly changing the
+// parameters linvel_setpoint, angvel_setpoint, linvel_stepsize, angvel_stepsize
 
 class TurtlebotCommand
 {
@@ -76,23 +80,28 @@ void TurtlebotCommand::controlBot()
 {
 	if(odometry_updated==true)
 	{
+		double linvel_des, angvel_des, linvel_step, angvel_step;
+		nh.param("linvel_setpoint", linvel_des, LINVEL_SETPOINT);
+		nh.param("angvel_setpoint", angvel_des, ANGVEL_SETPOINT);
+		nh.param("linvel_stepsize", linvel_step, LINVEL_STEPSIZE);
+		nh.param("angvel_stepsize", angvel_step, ANGVEL_STEPSIZE);
 		// put code for computing new command velocities
-		if(curr_linvel.x < LINVEL_SETPOINT)
+		if(curr_linvel.x < linvel_des)
 		{
-			cmd_linvel.x = curr_linvel.x + 0.01;
+			cmd_linvel.x = curr_linvel.x + linvel_step;
 		}
 		else
 		{
-			cmd_linvel.x = curr_linvel.x - 0.01;
+			cmd_linvel.x = curr_linvel.x - linvel_step;
 		}
 
-		if(curr_angvel.z < ANGVEL_SETPOINT)
+		if(curr_angvel.z < angvel_des)
 		{
-			cmd_angvel.z = curr_angvel.z + 0.1;
+			cmd_angvel.z = curr_angvel.z + angvel_step;
 		}
 		else
 		{
-			cmd_angvel.z = curr_angvel.z - 0.1;
+			cmd_angvel.z = curr_angvel.z - angvel_step;
 		}
 	}
 	// if odometry data is not updated, use the old command velocities..
