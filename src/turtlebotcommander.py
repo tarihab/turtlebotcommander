@@ -8,8 +8,8 @@ from geometry_msgs.msg import Twist
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from sensor_msgs.msg import JointState
 from tf2_msgs.msg import TFMessage
+#from std_msgs import Bool
 
-rospy.init_node('turtlebotcommander')
 
 def odometryObserver(odomData):
 	# fill what to do with odometry data
@@ -34,21 +34,30 @@ def odometryObserver(odomData):
 	print ("angular velocity:" + str(angvel.x) + "," + str(angvel.y) + "," + str(angvel.z))
 	# time.sleep(5)
 	cmd_vel = Twist()
-	if linvel.x < 0.2:
-		cmd_vel.linear.x = linvel.x + 0.05
+	if linvel.x < 0.1:
+		cmd_vel.linear.x = linvel.x + 0.01
 	else:
-		cmd_vel.linear.x = linvel.x - 0.05
+		cmd_vel.linear.x = linvel.x - 0.01
 
-	if angvel.z < 0.2:
-		cmd_vel.angular.z = angvel.z + 0.05
+	if angvel.z < 1.0:
+		cmd_vel.angular.z = angvel.z + 0.1
 	else:
-		cmd_vel.angular.z = angvel.z - 0.05
+		cmd_vel.angular.z = angvel.z - 0.1
 
 	cmdPub.publish(cmd_vel)
 	# time.sleep(5)
-	
+	rospy.spin()
 
-odomSub = rospy.Subscriber('odom', Odometry, odometryObserver);
-cmdPub = rospy.Publisher('cmd_vel',Twist)
+if __name__=="__main__":
+	#try:
+	rospy.init_node('turtlebotcommander')
+	cmdPub = rospy.Publisher('cmd_vel',Twist)
 
-rospy.spin()
+	odomSub = rospy.Subscriber('odom', Odometry, odometryObserver);
+
+	#finally:
+		#stopMotors = rospy.Publisher('motor_power',Bool)
+		#stopCommand = Bool()
+		#stopCommand.data = False
+		#stopMotors.publish(stopCommand)
+

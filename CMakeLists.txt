@@ -8,6 +8,8 @@ project(turtlebotcommander)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  std_msgs
   geometry_msgs
   nav_msgs
   rospy
@@ -107,8 +109,8 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES turtlebotcommander
-#  CATKIN_DEPENDS geometry_msgs nav_msgs rospy sensor_msgs tf2_msgs time
-#  DEPENDS system_lib
+  CATKIN_DEPENDS roscpp std_msgs geometry_msgs nav_msgs rospy sensor_msgs tf2_msgs
+  DEPENDS system_lib
 )
 
 ###########
@@ -124,7 +126,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/turtlebotcommander.cpp
+#    src/${PROJECT_NAME}/turtlebotcommander.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -135,7 +137,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/turtlebotcommander_node.cpp)
+add_executable(${PROJECT_NAME}_node src/turtlebotcommander_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -145,12 +147,12 @@ include_directories(
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-# add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(${PROJECT_NAME}_node
+  ${catkin_LIBRARIES}
+)
 
 #############
 ## Install ##
