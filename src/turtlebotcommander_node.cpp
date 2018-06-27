@@ -7,8 +7,8 @@
 
 #include <string.h>
 
-#define LINVEL_SETPOINT 0.25
-#define ANGVEL_SETPOINT 1.0
+#define LINVEL_SETPOINT 0.2
+#define ANGVEL_SETPOINT 0.8
 #define LINVEL_STEPSIZE 0.01
 #define ANGVEL_STEPSIZE 0.1
 // the above values can be modified in real time by correspondingly changing the
@@ -86,6 +86,9 @@ void TurtlebotCommand::controlBot()
 		nh.param("linvel_stepsize", linvel_step, LINVEL_STEPSIZE);
 		nh.param("angvel_stepsize", angvel_step, ANGVEL_STEPSIZE);
 		// put code for computing new command velocities
+		cmd_linvel.x = linvel_des;
+		cmd_angvel.z = angvel_des;
+		/*
 		if(curr_linvel.x < linvel_des)
 		{
 			cmd_linvel.x = curr_linvel.x + linvel_step;
@@ -103,6 +106,7 @@ void TurtlebotCommand::controlBot()
 		{
 			cmd_angvel.z = curr_angvel.z - angvel_step;
 		}
+		*/
 	}
 	// if odometry data is not updated, use the old command velocities..
 
