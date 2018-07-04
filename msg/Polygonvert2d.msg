@@ -1,5 +1,10 @@
+int32 myid
 float64 myx
 float64 myy
 float64 mytheta
+float64 myvelx
+float64 myvely
+float64 myveltheta
+time tstamp
 float64[] xvertices
 float64[] yvertices

@@ -409,7 +409,7 @@ void gauss_legendre_tbl(int n, double* x, double* w, double eps)
 **************************************************************************************************
 *************************************************************************************************/
 
-
+// RIHAB..
 // structure to describe a line using two points (x1,y1) and (x2,y2)
 struct linedesc {
 	double x1;
@@ -418,6 +418,7 @@ struct linedesc {
 	double y2;
 };
 
+// RIHAB..
 double euclideandistance2d(double& x1,double& y1,double& x2,double& y2)
 {
 	return sqrt(((x1-x2)*(x1-x2)) + ((y1-y2)*(y1-y2)));
@@ -465,6 +466,7 @@ int cn_PnPoly( double Px, double Py, std::vector<double> Vx, std::vector<double>
 
 }
 
+// RIHAB..
 double polyintegrate(std::vector<double> xborder, std::vector<double> yborder, double (*func)(double, double, void*), void* data, int resx, int resy)
 {
 	double minx = *std::min_element(xborder.begin(), xborder.end());
@@ -490,6 +492,7 @@ double polyintegrate(std::vector<double> xborder, std::vector<double> yborder, d
 	return sum;
 }
 
+// RIHAB..
 double polyintegrate(std::vector<double> xborder, std::vector<double> yborder, double (*func)(double, double, void*), void* data, double reltol)
 {
 	double minx = *std::min_element(xborder.begin(), xborder.end());
@@ -544,20 +547,23 @@ double polyintegrate(std::vector<double> xborder, std::vector<double> yborder, d
 	return sum;
 }
 
+// RIHAB..
 struct argst
 {
 	double (*func)(double, double, void*);
 	std::vector<double> xb;
 	std::vector<double> yb;
-	void *data;  // length of xb and yb
+	void *data;  
 };
 
+// RIHAB..
 double boundedintegrand(double x, double y, void* ptr)
 {
 	struct argst* p = (struct argst*) ptr;
 	return p->func(x,y,p->data) * cn_PnPoly(x, y, p->xb, p->yb);
 }
 
+// RIHAB..
 double polyintegrate_gl(std::vector<double> xborder, std::vector<double> yborder, double (*func)(double, double, void*), void* data, int n)
 {
 	double minx = *std::min_element(xborder.begin(), xborder.end());
@@ -579,6 +585,50 @@ double polyintegrate_gl(std::vector<double> xborder, std::vector<double> yborder
 
 	double val;
 	val = gauss_legendre_2D_cube(n, &boundedintegrand, (void*) &argl, minx, maxx, miny, maxy);
+
+	return val;
+}
+
+// RIHAB..
+struct argst2
+{
+	double (*func)(void*, double, double, void*);
+	void *optr;
+	std::vector<double> xb;
+	std::vector<double> yb;
+	void *data;  
+};
+
+// RIHAB..
+double boundedintegrand2(double x, double y, void* ptr)
+{
+	struct argst2* p = (struct argst2*) ptr;
+	return p->func(p->optr,x,y,p->data) * cn_PnPoly(x, y, p->xb, p->yb);
+}
+
+// RIHAB..
+double polyintegrate_gl(std::vector<double> xborder, std::vector<double> yborder, double (*func)(void*, double, double, void*), void *optr, void* data, int n)
+{
+	double minx = *std::min_element(xborder.begin(), xborder.end());
+	double miny = *std::min_element(yborder.begin(), yborder.end());
+	double maxx = *std::max_element(xborder.begin(), xborder.end());
+	double maxy = *std::max_element(yborder.begin(), yborder.end());
+
+	//float deltax = (maxx - minx)/resx;
+	//float deltay = (maxy - miny)/resy;
+
+	double* xb = &xborder[0];
+	double* yb = &yborder[0];
+
+	struct argst2 argl;
+	argl.func = func;
+	argl.optr = optr;
+	argl.xb = xborder;
+	argl.yb = yborder;
+	argl.data = data;
+
+	double val;
+	val = gauss_legendre_2D_cube(n, &boundedintegrand2, (void*) &argl, minx, maxx, miny, maxy);
 
 	return val;
 }

@@ -10,6 +10,22 @@ double integrand_exp(double x, double y, void* data)
 	return exp(10*x)*tan(y);
 }
 
+class myclass {
+	public:
+		double integrand_exp(double x, double y, void* data)
+		{
+			return exp(10*x)*tan(y);
+		}
+
+};
+
+double integrand_wrapper(void *optr, double x, double y, void* data)
+{
+	myclass* op = (myclass*) optr;
+	double ret = op->integrand_exp(x, y, data);
+	return ret;
+}
+
 int main(void)
 {
 	std::vector<double> xborder;
@@ -36,6 +52,10 @@ int main(void)
 	intv2 = polyintegrate_gl(xborder, yborder, &integrand_exp, NULL, 512);
 
 	//std::cout<<"The integral1 value is : "<<intv1<<std::endl;
+	std::cout<<"The integral2 value is : "<<intv2<<std::endl;
+
+	myclass *myptr;
+	intv2 = polyintegrate_gl(xborder, yborder, &integrand_wrapper, myptr, NULL, 256);
 	std::cout<<"The integral2 value is : "<<intv2<<std::endl;
 
 	return 0;
