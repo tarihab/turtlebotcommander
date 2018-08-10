@@ -11,7 +11,7 @@
 #include <turtlebotcommander/Polygonvert2d.h>
 #include "polyintegration.h"
 
-#define LOOP_RATE 10.0 // modify in realtime using parameter "/looprates/tbcommander"
+#define LOOP_RATE 20.0 // modify in realtime using parameter "/looprates/tbcommander"
 
 // for simpleControl 
 #define LINVEL_SETPOINT 0.2
@@ -23,8 +23,9 @@
 
 // for coverageControl
 #define NAGENTS 1 // modify in realtime using parameter "/domain/nagents"
-#define CTRL_GAIN 1 // modify in realtime using parameter "/gains/cgain"
-#define ADAPT_GAIN 1 // modify in realtime using parameter "/gains/again"
+#define CTRL_GAIN 1.0 // modify in realtime using parameter "/gains/cgain"
+#define ADAPT_GAIN 1.0 // modify in realtime using parameter "/gains/again"
+#define PARAM_INIT_VALUE 0.1
 
 class TurtlebotCommand
 {
@@ -43,6 +44,7 @@ class TurtlebotCommand
 		geometry_msgs::Vector3 curr_linvel;
 		geometry_msgs::Vector3 curr_angvel;
 		ros::Time curr_tstamp;
+		double Cvix, Cviy; // current centroid coordinates
 
 		// current velocity from odometry
 		geometry_msgs::Vector3 curr_linvel_odom;
@@ -69,9 +71,19 @@ class TurtlebotCommand
 		std::vector<double> sd;
 		std::vector<double> strength;
 
+		int np; // number of parameters
+		std::vector<double> ahat; // parameter estimate
+		std::vector<double> ahat_prev; // parameter estimate previous value
+		std::vector<std::vector<double> > Lambda; // filter variable 1
+		std::vector<std::vector<double> > Lambda_prev; // filter variable 1 previous value
+		std::vector<double> lambda; // filter variable 2
+		std::vector<double> lambda_prev; // filter variable 2 previous value
+		ros::Time tstamp;
+		ros::Time tstamp_prev;
+
 		// gains
-		int cgain;  // control gain
-		int again;  // adaptation gain
+		double cgain;  // control gain
+		double again;  // adaptation gain
 
 		// rate at which the main loop is run.. should be ideally lower than the rate at which vrpn 
 		// interface loop is run
@@ -86,6 +98,9 @@ class TurtlebotCommand
 		// flag indicating if new odometry information is available..
 		bool vrpn_updated;
 
+		// flag indicating if the algorithm is adaptive or not
+		int adaptive;
+
 		// callback function for updating odometry info..
 		void cbOdometryUpdate(const nav_msgs::Odometry&);
 
@@ -97,19 +112,23 @@ class TurtlebotCommand
 	
 		double l2_norm(std::vector<double> const&);
 		double l2_norm(double, double);
+		double dotproduct(std::vector<double> const&, std::vector<double> const&);
 	
 		// coverage control algorithm implementation.. run with a timer..
-		void coverageControlBot();
+		void coverageControlBot(int);
 
 	public:
 
 		double phi_fcn(double, double, void*);
 		double qphi_fcn(double, double, void*);
+		double adaptation_integrand(double, double, void*);
 
 		// constructor version 1
 		TurtlebotCommand(bool flag=true)
 		{
 			nh.param("/looprates/tbcommander", looprate, LOOP_RATE);
+			//nh.getParam("/looprates/tbcommander", looprate);
+			std::cout<<"Loop rate set at "<<looprate<<" Hz"<<std::endl;
 			vrpn_updated = false;
 			odometry_updated = false;
 			cmdvel_pub = nh.advertise<geometry_msgs::Twist>("cmd_vel",100);
@@ -123,15 +142,78 @@ class TurtlebotCommand
 			nh.getParam("/phi/centrey", centrey);
 			nh.getParam("/phi/sd", sd);
 			nh.getParam("/phi/strength", strength);
+			np = static_cast<int>(strength.size());
+			double paramInitVal;
+			nh.param("/adaptation/paramInitValue", paramInitVal, PARAM_INIT_VALUE);
+			ahat.resize(np,paramInitVal);
+			ahat_prev.resize(np,paramInitVal);
+			Lambda.resize(np, std::vector<double>(np,0.0));
+			Lambda_prev.resize(np, std::vector<double>(np,0.0));
+			lambda.resize(np,0.0);
+			lambda_prev.resize(np,0.0);
+			std::cout<<"centrex: "<<centrex[0]<<std::endl;
+			std::cout<<"centrey: "<<centrey[0]<<std::endl;
+			std::cout<<"sd: "<<sd[0]<<std::endl;
+			std::cout<<"strength: "<<strength[0]<<std::endl;
+
+			// xpartition and ypartition initialized to the border vertices
+			nh.getParam("/domain/borderx", xpartition);
+			nh.getParam("/domain/bordery", ypartition);
 
 			nh.param("/gains/cgain", cgain, CTRL_GAIN);
 			nh.param("/gains/again", again, ADAPT_GAIN);
+			std::cout<<"Controller gain: "<<cgain<<std::endl;
+			std::cout<<"Adaptation gain: "<<again<<std::endl;
 
+			cmd_linvel.x = 0.0;
+			cmd_linvel.y = 0.0;
+			cmd_linvel.z = 0.0;
+			cmd_angvel.x = 0.0;
+			cmd_angvel.y = 0.0;
+			cmd_angvel.z = 0.0;
+			curr_state.x = 0.0;
+			curr_state.y = 0.0;
+			curr_state.theta = 0.0;
+			curr_vel.x = 0.0;
+			curr_vel.y = 0.0;
+			curr_vel.theta = 0.0;
+
+			std::string ns = ros::this_node::getNamespace();
+			std::cout<<"The namespace is : "<<ns<<std::endl;
+			size_t ind = ns.find_last_not_of("0123456789");
+			myid = atoi((ns.substr(ind+1)).c_str());
+			std::cout<<"Id of the agent is :"<<myid<<std::endl;
+
+			nh.param("/adaptive", adaptive, 0);
+			std::cout<<"Adaptive :"<<adaptive<<std::endl;
+
+			tstamp_prev = ros::Time::now();
+
+			int stopagents;
+			int stopflag = 1;
 			// timer code
 			ros::Rate loop_rate(looprate);
 			while(ros::ok())
 			{
-				simpleControlBot();
+				
+				nh.param("/stopAgents", stopagents, 0);
+				if(stopagents==0) {
+					stopflag = 1;
+					//simpleControlBot();
+					coverageControlBot(adaptive);
+				}
+				else { // stop the agents
+					if(stopflag==1) {
+						std::cout<<"Agent stopped"<<std::endl;
+						stopflag = 0;
+					}
+					geometry_msgs::Twist cmd_velocity;	
+					cmd_linvel.x = 0.0;
+					cmd_angvel.z = 0.0;
+					cmd_velocity.linear = cmd_linvel;
+					cmd_velocity.angular = cmd_angvel;
+					cmdvel_pub.publish(cmd_velocity);
+				}
 	
 				ros::spinOnce();
 				loop_rate.sleep();
@@ -178,6 +260,8 @@ void TurtlebotCommand::cbVrpnUpdate(const turtlebotcommander::Polygonvert2d& msg
 	if(vrpn_updated==false) {
 		vrpn_updated = true;
 	}
+	
+	// std::cout<<"Updated VRPN data"<<std::endl;
 
 }
 
@@ -195,14 +279,33 @@ double TurtlebotCommand::l2_norm(double x, double y) {
     accum += (y*y);
     return sqrt(accum);
 }
+		
+double TurtlebotCommand::dotproduct(std::vector<double> const& v1, std::vector<double> const& v2) {
+	double dotp = 0.0;
+	int n = static_cast<int>(v1.size());
+	for(int i=0; i<n; i++) {
+		dotp += v1[i]*v2[i];
+	}
+	return dotp;
+}
 
 double TurtlebotCommand::phi_fcn(double qx, double qy, void* ptr)
 {
 	double phival = 0.0;
 	size_t nc = centrex.size();
+	int flag = 0;
+	if(ptr==NULL && adaptive==1) {
+		flag = 1;	
+	}
 	
-	for(int i=0; i<nc; i++) {
-		phival = phival + strength[i]*(exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i])));	
+	if(flag==0) {  // not adaptive control
+		for(int i=0; i<nc; i++) {
+			phival = phival + strength[i]*(exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i])));	
+		}
+	} else { // adaptive control case
+		for(int i=0; i<nc; i++) {
+			phival = phival + ahat[i]*(exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i])));	
+		}
 	}
 
 	return phival;
@@ -225,6 +328,22 @@ double TurtlebotCommand::qphi_fcn(double qx, double qy, void* ptr)
 	return qphival;
 }
 
+double TurtlebotCommand::adaptation_integrand(double qx, double qy, void* ptr)
+{
+	int i = *(int*) ptr;
+
+	double val = 0.0;
+	double Ki = exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i]));
+	double e1 = curr_state.x - Cvix;
+	double e2 = curr_state.y - Cviy;
+	/* double tmp1 = (qx-curr_state.x)*e1;
+	double tmp2 = (qy-curr_state.y)*e2;
+	val = Ki*(tmp1+tmp2); */
+	val = Ki*(((qx-curr_state.x)*e1)+((qy-curr_state.y)*e2));
+	
+	return val;
+}
+
 double phi_wrapper(void* optr, double qx, double qy, void* ptr)
 {
 	TurtlebotCommand* op = (TurtlebotCommand*) optr;
@@ -238,6 +357,14 @@ double qphi_wrapper(void* optr, double qx, double qy, void* ptr)
 	TurtlebotCommand* op = (TurtlebotCommand*) optr;
 	double ret;
 	ret = op->qphi_fcn(qx, qy, ptr);
+	return ret;
+}
+
+double adaptation_int_wrapper(void* optr, double qx, double qy, void* ptr)
+{
+	TurtlebotCommand* op = (TurtlebotCommand*) optr;
+	double ret;
+	ret = op->adaptation_integrand(qx, qy, ptr);
 	return ret;
 }
 
@@ -287,40 +414,136 @@ void TurtlebotCommand::simpleControlBot()
 
 }
 
-void TurtlebotCommand::coverageControlBot()
+void TurtlebotCommand::coverageControlBot(int adaptive)
 {
 	int i;
-	double Mvi, Lvi1, Lvi2, Cvi1, Cvi2;
-
-	/**********************************************************************************************
-	************ calculate the centroid of the current voronoi partition **************************
-	**********************************************************************************************/
-	Mvi = polyintegrate_gl(xpartition, ypartition, &phi_wrapper, this, NULL, 512);
-	i = 1;
-	Lvi1 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
-	i = 2;
-	Lvi2 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
+	double Mvi, Lvi1, Lvi2;
 	
-	// the two components of the centroid
-	Cvi1 = Lvi1/Mvi;
-	Cvi2 = Lvi2/Mvi;
+	if(adaptive==0) {
+		/**********************************************************************************************
+		************ calculate the centroid of the current voronoi partition **************************
+		**********************************************************************************************/
+		if(vrpn_updated==true) {
 
-	/**********************************************************************************************
-	******************************** compute the control ******************************************
-	**********************************************************************************************/
-	double e1 = curr_state.x - Cvi1;
-	double e2 = curr_state.y - Cvi2;
-	double th = curr_state.theta;
-	double d;
-	nh.param("/robot/d", d, 0.05);
-	// linear velocity command
-	cmd_linvel.x = -cgain*(cos(th)*e1 + sin(th)*e2);
-	cmd_linvel.y = 0.0;
-	cmd_linvel.z = 0.0;
-	// angular velocity command
-	cmd_angvel.z = -cgain*(1/d)*(-sin(th)*e1 + cos(th)*e2);
-	cmd_angvel.x = 0.0;
-	cmd_angvel.y = 0.0;
+			// this is just for testing.. comment these when running 
+			// nh.getParam("/domain/borderx", xpartition);
+			// nh.getParam("/domain/bordery", ypartition);
+			// curr_state.x = 0.0;
+			// curr_state.y = 0.0;
+			// curr_state.theta = 0.0;
+			///////////////////////////////////////////////////// //
+
+			Mvi = polyintegrate_gl(xpartition, ypartition, &phi_wrapper, this, NULL, 512);
+			i = 0;
+			Lvi1 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
+			i = 1;
+			Lvi2 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
+	
+			// the two components of the centroid
+			Cvix = Lvi1/Mvi;
+			Cviy = Lvi2/Mvi;
+
+		/**********************************************************************************************
+		******************************** compute the control ******************************************
+		**********************************************************************************************/
+			double e1 = curr_state.x - Cvix;
+			double e2 = curr_state.y - Cviy;
+			double th = curr_state.theta;
+			double d;
+			nh.param("/robot/d", d, 0.05);
+
+			// linear velocity command
+			cmd_linvel.x = -cgain*(cos(th)*e1 + sin(th)*e2);
+
+			// angular velocity command
+			// cmd_angvel.z = -cgain*(1/d)*(-sin(th)*e1 + cos(th)*e2);
+			cmd_angvel.z = -cgain*0.05*(1/d)*(-sin(th)*e1 + cos(th)*e2);
+		}
+	}
+	else {	// adaptive control algorithm
+
+		/**********************************************************************************************
+		************ calculate the centroid of the current voronoi partition **************************
+		**********************************************************************************************/
+		if(vrpn_updated==true) {
+
+			// this is just for testing.. comment these when running 
+			// nh.getParam("/domain/borderx", xpartition);
+			// nh.getParam("/domain/bordery", ypartition);
+			// curr_state.x = 0.0;
+			// curr_state.y = 0.0;
+			// curr_state.theta = 0.0;
+			///////////////////////////////////////////////////// //
+
+			Mvi = polyintegrate_gl(xpartition, ypartition, &phi_wrapper, this, NULL, 512);
+			i = 0;
+			Lvi1 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
+			i = 1;
+			Lvi2 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
+	
+			// the two components of the centroid
+			Cvix = Lvi1/Mvi;
+			Cviy = Lvi2/Mvi;
+
+		/**********************************************************************************************
+		******************************** compute the control ******************************************
+		**********************************************************************************************/
+			double e1 = curr_state.x - Cvix;
+			double e2 = curr_state.y - Cviy;
+			double th = curr_state.theta;
+			double d;
+			nh.param("/robot/d", d, 0.05);
+
+			// linear velocity command
+			cmd_linvel.x = -cgain*(cos(th)*e1 + sin(th)*e2);
+
+			// angular velocity command
+			// cmd_angvel.z = -cgain*(1/d)*(-sin(th)*e1 + cos(th)*e2);
+			cmd_angvel.z = -cgain*0.05*(1/d)*(-sin(th)*e1 + cos(th)*e2);
+
+		/**********************************************************************************************
+		******************************** adaptation law ***********************************************
+		**********************************************************************************************/
+			int i=10;
+			double phim = phi_fcn(curr_state.x, curr_state.y, (void *) &i); // measurement of phi
+
+			tstamp = ros::Time::now();
+			double dt = tstamp.toSec() - tstamp_prev.toSec();
+
+			ahat_prev = ahat;
+			std::vector<double> bi(np, 0.0);
+			double amin, k1; 
+			nh.getParam("/adaptation/paramInitValue", amin);
+			nh.getParam("/adaptation/gain1", k1);
+			for(int i=0; i<np; i++) {
+				bi[i] = polyintegrate_gl(xpartition, ypartition, &adaptation_int_wrapper, this, (void*) &i, 512);
+				bi[i] = -cgain*bi[i] - k1*(dotproduct(Lambda[i],ahat) - lambda[i]);
+				if((ahat[i]==amin && bi[i]<0) || (ahat[i]<amin)) {
+					bi[i] = 0.0;
+				}
+
+				ahat[i] = ahat_prev[i] + again*bi[i]*dt;
+			}
+
+			// update the filter variables
+			Lambda_prev = Lambda;
+			lambda_prev = lambda;
+			double alpha, Ki, Kj;
+			nh.getParam("/adaptation/alpha",alpha);
+			for(int i=0; i<np; i++) {
+				Ki = (exp(-(pow(l2_norm(curr_state.x-centrex[i], curr_state.y-centrey[i]),2))/(sd[i]*sd[i])));
+				for(int j=0; j<np; j++) {
+					Kj = (exp(-(pow(l2_norm(curr_state.x-centrex[j], curr_state.y-centrey[j]),2))/(sd[j]*sd[j])));
+					Lambda[i][j] = exp(-alpha*dt)*Lambda_prev[i][j] + (1-exp(-alpha*dt))*Ki*Kj;
+				}
+				lambda[i] = exp(-alpha*dt)*lambda_prev[i] + (1-exp(-alpha*dt))*Ki*phim;
+			}
+
+			tstamp_prev = tstamp;
+	
+		}
+
+	}
 
 	/**********************************************************************************************
 	******************************** publish the control values ***********************************
@@ -338,6 +561,7 @@ int main(int argc, char **argv)  // node main function
 {
 	ros::init(argc, argv, "turtlebot_commander");	// initializes Node Name
 
+	std::cout<<"Node name : "<<ros::this_node::getName()<<std::endl;
 	//ros::NodeHandle nh;	// Node handle declaration for comm. with ROS system
 	//ros::Publisher cmdvel_turtlebot_pub = nh.advertise<Twist>("cmd_vel",100);
 

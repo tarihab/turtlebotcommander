@@ -9,4 +9,16 @@
 		<node pkg="turtlebotcommander" type="vrpnagentinterface_node" name="vrpnagentinterface"/>
 		<node pkg="turtlebotcommander" type="turtlebotcommander_node" name="turtlebotcommander"/>
 	</group>
+	<group ns="tb2">
+		<node pkg="turtlebotcommander" type="vrpnagentinterface_node" name="vrpnagentinterface"/>
+		<node pkg="turtlebotcommander" type="turtlebotcommander_node" name="turtlebotcommander"/>
+	</group>
+	<group ns="tb3">
+		<node pkg="turtlebotcommander" type="vrpnagentinterface_node" name="vrpnagentinterface"/>
+		<node pkg="turtlebotcommander" type="turtlebotcommander_node" name="turtlebotcommander"/>
+	</group>
+	<group ns="tb4">
+		<node pkg="turtlebotcommander" type="vrpnagentinterface_node" name="vrpnagentinterface"/>
+		<node pkg="turtlebotcommander" type="turtlebotcommander_node" name="turtlebotcommander"/>
+	</group>
 </launch>

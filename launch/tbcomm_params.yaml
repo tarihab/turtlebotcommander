@@ -1,25 +1,37 @@
 # the list of parameters
 #
 # no.of agents
-/domain/nagents: 2
+/domain/nagents: 5
 #
 # the domain boundary vertices - all must contain the same no.of items
-/domain/borderx: [0, 1, 1, 0]
-/domain/bordery: [0, 0, 1, 1]
+/domain/borderx: [-2.0, 2.0, 2.0, -2.0]
+/domain/bordery: [-2.0, -2.0, 2.0, 2.0]
 #
-# the density function parameters - all must contain the same no.of items
+# the density function parameters - all (except biason) must contain the 
+# same no.of items if biason=0; else, strength should have one extra value
 /phi/centrex: [0.5]
 /phi/centrey: [0.5]
 /phi/sd: [0.2]
 /phi/strength: [1]
+/phi/biason: 0
 #
 # the control and adaptation gains
-/gains/cgain: 1
-/gains/again: 1
+/gains/cgain: 0.1
+/gains/again: 1.0
 #
 # the loop rates
-/looprates/tbcommander: 20
-/looprates/vrpninterface: 40
+/looprates/tbcommander: 10
+/looprates/vrpninterface: 20
 #
 # robot parameters
 /robot/d: 0.05
+#
+# adaptation
+/adaptation/paramInitValue: 0.1
+/adaptation/alpha: 1.0
+/adaptation/gain1: 2
+/adaptation/gain2: 5 # not used
+#
+# other parameters
+adaptive: 1
+stopAgents: 1

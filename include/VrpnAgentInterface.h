@@ -94,6 +94,7 @@ class VrpnAgentInterface
 			vrpndata_sub.resize(n);
 
 			looprate = rate;
+			std::cout<<"Loop rate set at "<<looprate<<" Hz"<<std::endl;
 
 			prevx = 0;
 			prevy = 0;
@@ -146,6 +147,7 @@ class VrpnAgentInterface
 			nh.param("/looprates/vrpninterface", looprate, LOOP_RATE);
 			nh.getParam("/domain/borderx", xborder);
 			nh.getParam("/domain/bordery", yborder);
+			std::cout<<"Loop rate set at "<<looprate<<" Hz"<<std::endl;
 
 			vrpn_updated = false;
 			publish_data = data_publish;
@@ -227,7 +229,7 @@ void VrpnAgentInterface::cbVrpndataUpdate(const geometry_msgs::PoseStamped::Cons
 		mytheta= yaw;
 
 		/**********************************************************************************
-		 ******************** Computing velocities from position data *********************
+		 ******* Computing velocities from position data (code not verified) **************
 		 *********************************************************************************/
 		totalx = totalx - velx[readIndex];
 		totaly = totaly - vely[readIndex];
