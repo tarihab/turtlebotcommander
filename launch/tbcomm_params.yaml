@@ -8,12 +8,12 @@
 /domain/bordery: [-2.0, -2.0, 2.0, 2.0]
 #
 # the density function parameters - all (except biason) must contain the 
-# same no.of items if biason=0; else, strength should have one extra value
+# same no.of items if bias_on=0; else, strength should have one extra value
 /phi/centrex: [0.5]
 /phi/centrey: [0.5]
 /phi/sd: [0.2]
 /phi/strength: [1]
-/phi/biason: 0
+/phi/bias_on: 0
 #
 # the control and adaptation gains
 /gains/cgain: 0.1
@@ -34,4 +34,7 @@
 #
 # other parameters
 adaptive: 1
+usesensors: 0
 stopAgents: 1
+logdata: 0
+datalog_rate: 0.1  # as a fraction of the tbcommander looprate

@@ -11,6 +11,8 @@
 #include <turtlebotcommander/Polygonvert2d.h>
 #include "polyintegration.h"
 
+#include <rgbsensor/rgbdata.h>
+
 #define LOOP_RATE 20.0 // modify in realtime using parameter "/looprates/tbcommander"
 
 // for simpleControl 
@@ -27,13 +29,23 @@
 #define ADAPT_GAIN 1.0 // modify in realtime using parameter "/gains/again"
 #define PARAM_INIT_VALUE 0.1
 
+struct rgb_struct
+{
+	int r;
+	int g;
+	int b;
+	int c;
+	long colortemp;
+	int lux;
+};
+
 class TurtlebotCommand
 {
 
 	private:
 		ros::NodeHandle nh;
 		ros::Publisher cmdvel_pub;
-		ros::Subscriber odom_sub, vrpn_sub;
+		ros::Subscriber odom_sub, vrpn_sub, rgb_sub;
 
 		// id of the robot
 		int32_t myid;
@@ -101,11 +113,30 @@ class TurtlebotCommand
 		// flag indicating if the algorithm is adaptive or not
 		int adaptive;
 
+		// rgb measurement
+		struct rgb_struct rgb_feedback;
+
+		// flag indicating if new rgb data is available..
+		bool rgb_updated;
+
+		// flag indicating whether to use sensor values or not..
+		int usesensors;
+
+		// file for logging the data
+		ofstream filelog;
+
+		// flag indicating whether to log data or not..
+		int logdata;
+		double lograte; // as a fraction of the looprate..
+
 		// callback function for updating odometry info..
 		void cbOdometryUpdate(const nav_msgs::Odometry&);
 
 		// callback function for updating info from position tracking system (vrpn)..
 		void cbVrpnUpdate(const turtlebotcommander::Polygonvert2d&);
+
+		// callback function for rgb sensor data..
+		void cbRgbUpdate(const rgbsensor::rgbdata&);
 
 		// compute and publish command velocity.. run with a timer..
 		void simpleControlBot();
@@ -131,9 +162,11 @@ class TurtlebotCommand
 			std::cout<<"Loop rate set at "<<looprate<<" Hz"<<std::endl;
 			vrpn_updated = false;
 			odometry_updated = false;
+			rgb_updated = false;
 			cmdvel_pub = nh.advertise<geometry_msgs::Twist>("cmd_vel",100);
 			odom_sub = nh.subscribe("odom",1000,&TurtlebotCommand::cbOdometryUpdate, this);
 			vrpn_sub = nh.subscribe("agentvrpndata",1000,&TurtlebotCommand::cbVrpnUpdate, this);
+			rgb_sub = nh.subscribe("rgbcdata",1000,&TurtlebotCommand::cbRgbUpdate, this);
 			nh.param("/domain/nagents", nagents, NAGENTS);
 
 			use_vrpn_velocity = flag;
@@ -186,6 +219,16 @@ class TurtlebotCommand
 
 			nh.param("/adaptive", adaptive, 0);
 			std::cout<<"Adaptive :"<<adaptive<<std::endl;
+
+			nh.param("/usesensors", usesensors, 0);
+			std::cout<<"Use sensors :"<<usesensors<<std::endl;
+
+			nh.param("/logdata", logdata, 0);
+			std::cout<<"Data logging :"<<logdata<<std::endl;
+			nh.param("/datalog_rate", lograte, 0);
+			std::cout<<"Data logging rate :"<<lograte<<std::endl;
+
+			filelog.open("output_log");
 
 			tstamp_prev = ros::Time::now();
 
@@ -263,6 +306,20 @@ void TurtlebotCommand::cbVrpnUpdate(const turtlebotcommander::Polygonvert2d& msg
 	
 	// std::cout<<"Updated VRPN data"<<std::endl;
 
+}
+
+void TurtlebotCommand::cbRgbUpdate(const rgbsensor::rgbdata& msg)
+{
+	rgb_feedback.r = msg.r;
+	rgb_feedback.g = msg.g;
+	rgb_feedback.b = msg.b;
+	rgb_feedback.c = msg.c;
+	rgb_feedback.colortemp = msg.temp;
+	rgb_feedback.lux = msg.lum;
+
+	if(rgb_updated==false) {
+		rgb_updated = true;
+	}
 }
 
 double TurtlebotCommand::l2_norm(std::vector<double> const& u) {
@@ -504,8 +561,13 @@ void TurtlebotCommand::coverageControlBot(int adaptive)
 		/**********************************************************************************************
 		******************************** adaptation law ***********************************************
 		**********************************************************************************************/
-			int i=10;
-			double phim = phi_fcn(curr_state.x, curr_state.y, (void *) &i); // measurement of phi
+			double phim;
+			if(usesensors==0) {
+				int i=10;
+				phim = phi_fcn(curr_state.x, curr_state.y, (void *) &i); // measurement of phi
+			} else {
+				phim = static_cast<double>(rgb_feedback.r);	
+			}
 
 			tstamp = ros::Time::now();
 			double dt = tstamp.toSec() - tstamp_prev.toSec();
@@ -542,6 +604,8 @@ void TurtlebotCommand::coverageControlBot(int adaptive)
 			tstamp_prev = tstamp;
 	
 		}
+
+		rgb_updated = false;
 
 	}
 
