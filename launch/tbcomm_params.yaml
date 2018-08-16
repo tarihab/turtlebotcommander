@@ -36,5 +36,5 @@
 adaptive: 1
 usesensors: 0
 stopAgents: 1
-logdata: 0
+logdata: 1
 datalog_rate: 0.1  # as a fraction of the tbcommander looprate

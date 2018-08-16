@@ -228,11 +228,11 @@ class TurtlebotCommand
 			std::cout<<"Data logging :"<<logdata<<std::endl;
 			nh.param("/datalog_rate", lograte, 0.0);
 			std::cout<<"Data logging rate :"<<lograte<<std::endl;
-			double logflag = 0;
+			double logflag = 0.0;
 
 			// convert number myid to string
 			std::string id_str = boost::lexical_cast<std::string>(myid);  
-			std::string str = "agent" + id_str + "_" + "log";
+			std::string str = "/home/rihab/agent" + id_str + "_" + "log";
 			filelog.open(str.c_str(), std::ios::out | std::ios::trunc);
 
 			tstamp_prev = ros::Time::now();
@@ -264,8 +264,10 @@ class TurtlebotCommand
 
 				logflag = logflag + lograte;	
 				if(logflag >= 1.0) {
-					logflag = 0;
-					filelog<<curr_tstamp.toSec()<<"\t"<<curr_state.x<<"\t"<<curr_state.y<<"\t"<<curr_state.theta<<"\t"<<cmd_linvel.x<<"\t"<<cmd_angvel.z<<"\t"<<Cvix<<"\t"<<Cviy<<"\t"<<rgb_feedback.r<<"\n";
+					logflag = 0.0;
+					if(logdata>0) {
+						filelog<<curr_tstamp.toSec()<<"\t"<<curr_state.x<<"\t"<<curr_state.y<<"\t"<<curr_state.theta<<"\t"<<cmd_linvel.x<<"\t"<<cmd_angvel.z<<"\t"<<Cvix<<"\t"<<Cviy<<"\t"<<rgb_feedback.r<<"\n";
+					}
 				}
 	
 				ros::spinOnce();
