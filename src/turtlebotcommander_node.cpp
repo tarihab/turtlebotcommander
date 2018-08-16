@@ -1,3 +1,4 @@
+#include <fstream>
 #include <ros/ros.h>
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/Pose.h>
@@ -123,7 +124,7 @@ class TurtlebotCommand
 		int usesensors;
 
 		// file for logging the data
-		ofstream filelog;
+		std::ofstream filelog;
 
 		// flag indicating whether to log data or not..
 		int logdata;
@@ -225,13 +226,14 @@ class TurtlebotCommand
 
 			nh.param("/logdata", logdata, 0);
 			std::cout<<"Data logging :"<<logdata<<std::endl;
-			nh.param("/datalog_rate", lograte, 0);
+			nh.param("/datalog_rate", lograte, 0.0);
 			std::cout<<"Data logging rate :"<<lograte<<std::endl;
 			double logflag = 0;
 
 			// convert number myid to string
-			std::string str = boost::lexical_cast<std::string>(myid);  
-			filelog.open("agent"+str+"_"+"log");
+			std::string id_str = boost::lexical_cast<std::string>(myid);  
+			std::string str = "agent" + id_str + "_" + "log";
+			filelog.open(str.c_str(), std::ios::out | std::ios::trunc);
 
 			tstamp_prev = ros::Time::now();
 
