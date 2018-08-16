@@ -227,8 +227,11 @@ class TurtlebotCommand
 			std::cout<<"Data logging :"<<logdata<<std::endl;
 			nh.param("/datalog_rate", lograte, 0);
 			std::cout<<"Data logging rate :"<<lograte<<std::endl;
+			double logflag = 0;
 
-			filelog.open("output_log");
+			// convert number myid to string
+			std::string str = boost::lexical_cast<std::string>(myid);  
+			filelog.open("agent"+str+"_"+"log");
 
 			tstamp_prev = ros::Time::now();
 
@@ -238,7 +241,6 @@ class TurtlebotCommand
 			ros::Rate loop_rate(looprate);
 			while(ros::ok())
 			{
-				
 				nh.param("/stopAgents", stopagents, 0);
 				if(stopagents==0) {
 					stopflag = 1;
@@ -257,10 +259,18 @@ class TurtlebotCommand
 					cmd_velocity.angular = cmd_angvel;
 					cmdvel_pub.publish(cmd_velocity);
 				}
+
+				logflag = logflag + lograte;	
+				if(logflag >= 1.0) {
+					logflag = 0;
+					filelog<<curr_tstamp.toSec()<<"\t"<<curr_state.x<<"\t"<<curr_state.y<<"\t"<<curr_state.theta<<"\t"<<cmd_linvel.x<<"\t"<<cmd_angvel.z<<"\t"<<Cvix<<"\t"<<Cviy<<"\t"<<rgb_feedback.r<<"\n";
+				}
 	
 				ros::spinOnce();
 				loop_rate.sleep();
 			}
+
+			filelog.close();
 		}
 
 };
