@@ -7,12 +7,12 @@
 /domain/borderx: [-2.0, 2.0, 2.0, -2.0]
 /domain/bordery: [-2.0, -2.0, 2.0, 2.0]
 #
-# the density function parameters - all (except biason) must contain the 
+# the density function parameters - all (except bias_on) must contain the 
 # same no.of items if bias_on=0; else, strength should have one extra value
-/phi/centrex: [0.5]
-/phi/centrey: [0.5]
-/phi/sd: [0.2]
-/phi/strength: [1]
+/phi/centrex: [1.0, 1.0]
+/phi/centrey: [1.0, -1.0]
+/phi/sd: [0.2, 0.2]
+/phi/strength: [1, 1]
 /phi/bias_on: 0
 #
 # the control and adaptation gains

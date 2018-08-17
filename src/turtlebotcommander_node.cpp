@@ -116,12 +116,12 @@ class TurtlebotCommand
 
 		// rgb measurement
 		struct rgb_struct rgb_feedback;
-
 		// flag indicating if new rgb data is available..
 		bool rgb_updated;
-
 		// flag indicating whether to use sensor values or not..
 		int usesensors;
+
+		int bias_on;
 
 		// file for logging the data
 		std::ofstream filelog;
@@ -172,11 +172,13 @@ class TurtlebotCommand
 
 			use_vrpn_velocity = flag;
 			
+			nh.param("/phi/bias_on", bias_on, 0);
+
 			nh.getParam("/phi/centrex", centrex);
 			nh.getParam("/phi/centrey", centrey);
 			nh.getParam("/phi/sd", sd);
 			nh.getParam("/phi/strength", strength);
-			np = static_cast<int>(strength.size());
+			np = static_cast<int>(centrex.size());
 			double paramInitVal;
 			nh.param("/adaptation/paramInitValue", paramInitVal, PARAM_INIT_VALUE);
 			ahat.resize(np,paramInitVal);
@@ -234,6 +236,7 @@ class TurtlebotCommand
 			std::string id_str = boost::lexical_cast<std::string>(myid);  
 			std::string str = "/home/rihab/agent" + id_str + "_" + "log";
 			filelog.open(str.c_str(), std::ios::out | std::ios::trunc);
+
 
 			tstamp_prev = ros::Time::now();
 
@@ -377,6 +380,10 @@ double TurtlebotCommand::phi_fcn(double qx, double qy, void* ptr)
 		for(int i=0; i<nc; i++) {
 			phival = phival + ahat[i]*(exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i])));	
 		}
+	}
+
+	if(bias_on > 0) {
+		phival = phival + strength[nc]*1.0;
 	}
 
 	return phival;
