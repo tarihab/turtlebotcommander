@@ -12,12 +12,12 @@
 /phi/centrex: [1.0, 1.0]
 /phi/centrey: [1.0, -1.0]
 /phi/sd: [0.2, 0.2]
-/phi/strength: [1, 1]
+/phi/strength: [1, 0.5]
 /phi/bias_on: 0
 #
 # the control and adaptation gains
 /gains/cgain: 0.1
-/gains/again: 1.0
+/gains/again: 0.1
 #
 # the loop rates
 /looprates/tbcommander: 10
@@ -32,9 +32,15 @@
 /adaptation/gain1: 2
 /adaptation/gain2: 5 # not used
 #
+# parameters specific to l2 optimization
+/l2/gain1: 0.2
+/l2/rs: 0.2
+#
 # other parameters
 adaptive: 1
 usesensors: 0
+l2_on: 0
 stopAgents: 1
 logdata: 1
-datalog_rate: 0.1  # as a fraction of the tbcommander looprate
+datalog_rate: 2  # as a fraction of the tbcommander looprate
+int_precision: 256

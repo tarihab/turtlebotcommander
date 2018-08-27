@@ -29,6 +29,7 @@
 #define CTRL_GAIN 1.0 // modify in realtime using parameter "/gains/cgain"
 #define ADAPT_GAIN 1.0 // modify in realtime using parameter "/gains/again"
 #define PARAM_INIT_VALUE 0.1
+#define INT_PRECISION 256 // precision value for the 2d integration
 
 struct rgb_struct
 {
@@ -94,6 +95,9 @@ class TurtlebotCommand
 		ros::Time tstamp;
 		ros::Time tstamp_prev;
 
+		double sim_time;  // simulation time
+		double dt;  // simulation time
+
 		// gains
 		double cgain;  // control gain
 		double again;  // adaptation gain
@@ -123,12 +127,19 @@ class TurtlebotCommand
 
 		int bias_on;
 
+		// flag indicating whether to use L2 optimization
+		int l2_on;
+		double l2_gain1;
+		double l2_rs;
+
 		// file for logging the data
 		std::ofstream filelog;
 
 		// flag indicating whether to log data or not..
 		int logdata;
 		double lograte; // as a fraction of the looprate..
+
+		int int_precision; // precision for 2d integration..
 
 		// callback function for updating odometry info..
 		void cbOdometryUpdate(const nav_msgs::Odometry&);
@@ -153,7 +164,13 @@ class TurtlebotCommand
 
 		double phi_fcn(double, double, void*);
 		double qphi_fcn(double, double, void*);
+		double lambda_fcn(double, double, void*);
+		double qlambda_fcn(double, double, void*);
+		double mu_fcn(double, double, void*);
+		double qmu_fcn(double, double, void*);
 		double adaptation_integrand(double, double, void*);
+		double adaptation_integrand_l2(double, double, void*);
+		double adaptation_integrand_l2_lr(double, double, void*);
 
 		// constructor version 1
 		TurtlebotCommand(bool flag=true)
@@ -226,6 +243,11 @@ class TurtlebotCommand
 			nh.param("/usesensors", usesensors, 0);
 			std::cout<<"Use sensors :"<<usesensors<<std::endl;
 
+			nh.param("/l2_on", l2_on, 0);
+			std::cout<<"Use L2 Optimization :"<<l2_on<<std::endl;
+			nh.param("/l2/gain1", l2_gain1, 0.0);
+			nh.param("/l2/rs", l2_rs, 0.0);
+
 			nh.param("/logdata", logdata, 0);
 			std::cout<<"Data logging :"<<logdata<<std::endl;
 			nh.param("/datalog_rate", lograte, 0.0);
@@ -237,16 +259,24 @@ class TurtlebotCommand
 			std::string str = "/home/rihab/agent" + id_str + "_" + "log";
 			filelog.open(str.c_str(), std::ios::out | std::ios::trunc);
 
+			nh.param("/int_precision", int_precision, INT_PRECISION);
 
 			tstamp_prev = ros::Time::now();
+			sim_time = 0.0;
 
 			int stopagents;
+			//nh.param("/stopAgents", stopagents, 0);
 			int stopflag = 1;
 			// timer code
 			ros::Rate loop_rate(looprate);
 			while(ros::ok())
 			{
 				nh.param("/stopAgents", stopagents, 0);
+
+				tstamp = ros::Time::now();
+				dt = tstamp.toSec() - tstamp_prev.toSec();
+				sim_time = sim_time + dt; 
+
 				if(stopagents==0) {
 					stopflag = 1;
 					//simpleControlBot();
@@ -269,9 +299,15 @@ class TurtlebotCommand
 				if(logflag >= 1.0) {
 					logflag = 0.0;
 					if(logdata>0) {
-						filelog<<curr_tstamp.toSec()<<"\t"<<curr_state.x<<"\t"<<curr_state.y<<"\t"<<curr_state.theta<<"\t"<<cmd_linvel.x<<"\t"<<cmd_angvel.z<<"\t"<<Cvix<<"\t"<<Cviy<<"\t"<<rgb_feedback.r<<"\n";
+						filelog<<sim_time<<"\t"<<curr_state.x<<"\t"<<curr_state.y<<"\t"<<curr_state.theta<<"\t"<<cmd_linvel.x<<"\t"<<cmd_angvel.z<<"\t"<<Cvix<<"\t"<<Cviy<<"\t"<<rgb_feedback.r<<"\t"<<rgb_feedback.g<<"\t"<<rgb_feedback.b;
+						for(int j=0; j<np; j++) {
+							filelog<<"\t"<<ahat[j];
+						}
+						filelog<<"\n";
 					}
 				}
+				
+				tstamp_prev = tstamp;
 	
 				ros::spinOnce();
 				loop_rate.sleep();
@@ -406,6 +442,102 @@ double TurtlebotCommand::qphi_fcn(double qx, double qy, void* ptr)
 	return qphival;
 }
 
+double TurtlebotCommand::lambda_fcn(double qx, double qy, void* ptr)
+{
+	double lambdaval = 0.0;
+	double phival = 0.0;
+	size_t nc = centrex.size();
+	int flag = 0;
+	if(ptr==NULL && adaptive==1) {
+		flag = 1;	
+	}
+	
+	if(flag==0) {  // not adaptive control
+		for(int i=0; i<nc; i++) {
+			phival = phival + strength[i]*(exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i])));	
+		}
+	} else { // adaptive control case
+		for(int i=0; i<nc; i++) {
+			phival = phival + ahat[i]*(exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i])));	
+		}
+	}
+
+	if(bias_on > 0) {
+		phival = phival + strength[nc]*1.0;
+	}
+
+	double myx = curr_state.x;
+	double myy = curr_state.y;
+	lambdaval = (phival - l2_gain1*exp(-(pow(l2_norm(qx-myx, qy-myy),2))))*exp(-(pow(l2_norm(qx-myx, qy-myy),2)));
+
+	return lambdaval;
+}
+
+double TurtlebotCommand::qlambda_fcn(double qx, double qy, void* ptr)
+{
+	int i = *(int*) ptr;
+	// i=0 corresponds to qx, i=1 corresponds to qy
+
+	double qlambdaval = 0.0;
+	
+	if(i==0) {
+		qlambdaval = qx*lambda_fcn(qx,qy,NULL);
+	}
+	else if(i==1) {
+		qlambdaval = qy*lambda_fcn(qx,qy,NULL);
+	}
+
+	return qlambdaval;
+}
+
+double TurtlebotCommand::mu_fcn(double qx, double qy, void* ptr)
+{
+	double muval = 0.0;
+	double phival = 0.0;
+	size_t nc = centrex.size();
+	int flag = 0;
+	if(ptr==NULL && adaptive==1) {
+		flag = 1;	
+	}
+	
+	if(flag==0) {  // not adaptive control
+		for(int i=0; i<nc; i++) {
+			phival = phival + strength[i]*(exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i])));	
+		}
+	} else { // adaptive control case
+		for(int i=0; i<nc; i++) {
+			phival = phival + ahat[i]*(exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i])));	
+		}
+	}
+
+	if(bias_on > 0) {
+		phival = phival + strength[nc]*1.0;
+	}
+
+	double myx = curr_state.x;
+	double myy = curr_state.y;
+	muval = (phival - (l2_gain1/pow(l2_rs,4))*pow(pow(l2_norm(qx-myx, qy-myy),2)-(l2_rs*l2_rs),2))*((l2_rs*l2_rs)-pow(l2_norm(qx-myx, qy-myy),2));
+
+	return muval;
+}
+
+double TurtlebotCommand::qmu_fcn(double qx, double qy, void* ptr)
+{
+	int i = *(int*) ptr;
+	// i=0 corresponds to qx, i=1 corresponds to qy
+
+	double qmuval = 0.0;
+	
+	if(i==0) {
+		qmuval = qx*mu_fcn(qx,qy,NULL);
+	}
+	else if(i==1) {
+		qmuval = qy*mu_fcn(qx,qy,NULL);
+	}
+
+	return qmuval;
+}
+
 double TurtlebotCommand::adaptation_integrand(double qx, double qy, void* ptr)
 {
 	int i = *(int*) ptr;
@@ -417,7 +549,45 @@ double TurtlebotCommand::adaptation_integrand(double qx, double qy, void* ptr)
 	/* double tmp1 = (qx-curr_state.x)*e1;
 	double tmp2 = (qy-curr_state.y)*e2;
 	val = Ki*(tmp1+tmp2); */
+	val = -Ki*(((qx-curr_state.x)*e1)+((qy-curr_state.y)*e2));
+	
+	return val;
+}
+
+double TurtlebotCommand::adaptation_integrand_l2(double qx, double qy, void* ptr)
+{
+	int i = *(int*) ptr;
+
+	double val = 0.0;
+	double Ki = exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i]));
+	double myx = curr_state.x;
+	double myy = curr_state.y;
+	double e1 = myx - Cvix;
+	double e2 = myy - Cviy;
+	/* double tmp1 = (qx-curr_state.x)*e1;
+	double tmp2 = (qy-curr_state.y)*e2;
+	val = Ki*(tmp1+tmp2); */
+	val = -Ki*(((qx-curr_state.x)*e1)+((qy-curr_state.y)*e2));
+	val = val*exp(-(pow(l2_norm(qx-myx, qy-myy),2)));
+	
+	return val;
+}
+
+double TurtlebotCommand::adaptation_integrand_l2_lr(double qx, double qy, void* ptr)
+{
+	int i = *(int*) ptr;
+
+	double val = 0.0;
+	double Ki = exp(-(pow(l2_norm(qx-centrex[i], qy-centrey[i]),2))/(sd[i]*sd[i]));
+	double myx = curr_state.x;
+	double myy = curr_state.y;
+	double e1 = myx - Cvix;
+	double e2 = myy - Cviy;
+	/* double tmp1 = (qx-curr_state.x)*e1;
+	double tmp2 = (qy-curr_state.y)*e2;
+	val = Ki*(tmp1+tmp2); */
 	val = Ki*(((qx-curr_state.x)*e1)+((qy-curr_state.y)*e2));
+	val = val*((l2_rs*l2_rs)-pow(l2_norm(qx-myx, qy-myy),2));
 	
 	return val;
 }
@@ -438,11 +608,35 @@ double qphi_wrapper(void* optr, double qx, double qy, void* ptr)
 	return ret;
 }
 
+double lambda_wrapper(void* optr, double qx, double qy, void* ptr)
+{
+	TurtlebotCommand* op = (TurtlebotCommand*) optr;
+	double ret;
+	ret = op->lambda_fcn(qx, qy, ptr);
+	return ret;
+}
+
+double qlambda_wrapper(void* optr, double qx, double qy, void* ptr)
+{
+	TurtlebotCommand* op = (TurtlebotCommand*) optr;
+	double ret;
+	ret = op->qlambda_fcn(qx, qy, ptr);
+	return ret;
+}
+
 double adaptation_int_wrapper(void* optr, double qx, double qy, void* ptr)
 {
 	TurtlebotCommand* op = (TurtlebotCommand*) optr;
 	double ret;
 	ret = op->adaptation_integrand(qx, qy, ptr);
+	return ret;
+}
+
+double adaptation_int_l2_wrapper(void* optr, double qx, double qy, void* ptr)
+{
+	TurtlebotCommand* op = (TurtlebotCommand*) optr;
+	double ret;
+	ret = op->adaptation_integrand_l2(qx, qy, ptr);
 	return ret;
 }
 
@@ -511,19 +705,28 @@ void TurtlebotCommand::coverageControlBot(int adaptive)
 			// curr_state.theta = 0.0;
 			///////////////////////////////////////////////////// //
 
-			Mvi = polyintegrate_gl(xpartition, ypartition, &phi_wrapper, this, NULL, 512);
-			i = 0;
-			Lvi1 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
-			i = 1;
-			Lvi2 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
+			if(l2_on==0) {
+				Mvi = polyintegrate_gl(xpartition, ypartition, &phi_wrapper, this, NULL, int_precision);
+				i = 0;
+				Lvi1 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, int_precision);
+				i = 1;
+				Lvi2 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, int_precision);
+			}
+			else {
+				Mvi = polyintegrate_gl(xpartition, ypartition, &lambda_wrapper, this, NULL, int_precision);
+				i = 0;
+				Lvi1 = polyintegrate_gl(xpartition, ypartition, &qlambda_wrapper, this, (void*) &i, int_precision);
+				i = 1;
+				Lvi2 = polyintegrate_gl(xpartition, ypartition, &qlambda_wrapper, this, (void*) &i, int_precision);
+			}
 	
 			// the two components of the centroid
 			Cvix = Lvi1/Mvi;
 			Cviy = Lvi2/Mvi;
 
-		/**********************************************************************************************
-		******************************** compute the control ******************************************
-		**********************************************************************************************/
+			/**********************************************************************************************
+			******************************** compute the control ******************************************
+			**********************************************************************************************/
 			double e1 = curr_state.x - Cvix;
 			double e2 = curr_state.y - Cviy;
 			double th = curr_state.theta;
@@ -553,11 +756,20 @@ void TurtlebotCommand::coverageControlBot(int adaptive)
 			// curr_state.theta = 0.0;
 			///////////////////////////////////////////////////// //
 
-			Mvi = polyintegrate_gl(xpartition, ypartition, &phi_wrapper, this, NULL, 512);
-			i = 0;
-			Lvi1 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
-			i = 1;
-			Lvi2 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, 512);
+			if(l2_on==0) {
+				Mvi = polyintegrate_gl(xpartition, ypartition, &phi_wrapper, this, NULL, int_precision);
+				i = 0;
+				Lvi1 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, int_precision);
+				i = 1;
+				Lvi2 = polyintegrate_gl(xpartition, ypartition, &qphi_wrapper, this, (void*) &i, int_precision);
+			}
+			else {
+				Mvi = polyintegrate_gl(xpartition, ypartition, &lambda_wrapper, this, NULL, int_precision);
+				i = 0;
+				Lvi1 = polyintegrate_gl(xpartition, ypartition, &qlambda_wrapper, this, (void*) &i, int_precision);
+				i = 1;
+				Lvi2 = polyintegrate_gl(xpartition, ypartition, &qlambda_wrapper, this, (void*) &i, int_precision);
+			}
 	
 			// the two components of the centroid
 			Cvix = Lvi1/Mvi;
@@ -587,20 +799,27 @@ void TurtlebotCommand::coverageControlBot(int adaptive)
 				int i=10;
 				phim = phi_fcn(curr_state.x, curr_state.y, (void *) &i); // measurement of phi
 			} else {
-				phim = static_cast<double>(rgb_feedback.r);	
+				phim = static_cast<double>(rgb_feedback.r + rgb_feedback.g + rgb_feedback.b);	
 			}
 
-			tstamp = ros::Time::now();
-			double dt = tstamp.toSec() - tstamp_prev.toSec();
-
+			//std::cout<<dt<<std::endl;
 			ahat_prev = ahat;
 			std::vector<double> bi(np, 0.0);
 			double amin, k1; 
 			nh.getParam("/adaptation/paramInitValue", amin);
 			nh.getParam("/adaptation/gain1", k1);
+
 			for(int i=0; i<np; i++) {
-				bi[i] = polyintegrate_gl(xpartition, ypartition, &adaptation_int_wrapper, this, (void*) &i, 512);
+
+				if(l2_on==0) {
+					bi[i] = polyintegrate_gl(xpartition, ypartition, &adaptation_int_wrapper, this, (void*) &i, int_precision);
+				}
+				else {
+					bi[i] = polyintegrate_gl(xpartition, ypartition, &adaptation_int_l2_wrapper, this, (void*) &i, int_precision);
+				}
+
 				bi[i] = -cgain*bi[i] - k1*(dotproduct(Lambda[i],ahat) - lambda[i]);
+
 				if((ahat[i]==amin && bi[i]<0) || (ahat[i]<amin)) {
 					bi[i] = 0.0;
 				}
@@ -622,8 +841,6 @@ void TurtlebotCommand::coverageControlBot(int adaptive)
 				lambda[i] = exp(-alpha*dt)*lambda_prev[i] + (1-exp(-alpha*dt))*Ki*phim;
 			}
 
-			tstamp_prev = tstamp;
-	
 		}
 
 		rgb_updated = false;
