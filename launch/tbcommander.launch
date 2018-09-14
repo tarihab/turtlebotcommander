@@ -1,5 +1,5 @@
 <launch>
-	<include file="/home/rihab/catkin_ws/src/vrpn_client_ros/launch/sample.launch" />
+	<!-- <include file="/home/rihab/catkin_ws/src/vrpn_client_ros/launch/sample.launch" /> -->
 	<rosparam command="load" file="/home/rihab/catkin_ws/src/turtlebotcommander/launch/tbcomm_params.yaml" />
 	<group ns="tb0">
 		<node pkg="turtlebotcommander" type="vrpnagentinterface_node" name="vrpnagentinterface"/>

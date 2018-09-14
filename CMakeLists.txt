@@ -55,6 +55,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
     FILES
     Polygonvert2d.msg
+    ParamVec.msg
 #   Message1.msg
 #   Message2.msg
 )

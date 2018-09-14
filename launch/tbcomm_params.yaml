@@ -7,12 +7,12 @@
 /domain/borderx: [-2.0, 2.0, 2.0, -2.0]
 /domain/bordery: [-2.0, -2.0, 2.0, 2.0]
 #
-# the density function parameters - all (except bias_on) must contain the 
+# the density function parameters - all (except bias_on) must contain the
 # same no.of items if bias_on=0; else, strength should have one extra value
 /phi/centrex: [1.0, 1.0]
-/phi/centrey: [1.0, -1.0]
-/phi/sd: [0.2, 0.2]
-/phi/strength: [1, 0.5]
+/phi/centrey: [0.98, -0.8]
+/phi/sd: [0.6, 0.3]
+/phi/strength: [85, 30]
 /phi/bias_on: 0
 #
 # the control and adaptation gains
@@ -27,19 +27,21 @@
 /robot/d: 0.05
 #
 # adaptation
-/adaptation/paramInitValue: 0.1
+/adaptation/paramInitValue: 10
 /adaptation/alpha: 1.0
 /adaptation/gain1: 2
-/adaptation/gain2: 5 # not used
+/adaptation/gain2: 1 # gain for the consensus protocol
+/adaptation/consensus_protocol_on: 0
+/adaptation/modified_consensus: 0
 #
 # parameters specific to l2 optimization
-/l2/gain1: 0.2
+/l2/gain1: 1e-30
 /l2/rs: 0.2
 #
 # other parameters
 adaptive: 1
 usesensors: 0
-l2_on: 0
+l2_on: 1
 stopAgents: 1
 logdata: 1
 datalog_rate: 2  # as a fraction of the tbcommander looprate
