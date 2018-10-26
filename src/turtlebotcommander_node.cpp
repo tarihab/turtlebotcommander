@@ -898,6 +898,15 @@ void TurtlebotCommand::coverageControlBot(int adaptive)
 				}
 
 				ahat[i] = ahat_prev[i] + again*bi[i]*dt;
+
+				if(consensus_on>0) {
+					// publish ahat values
+					turtlebotcommander::ParamVec param_publish;
+					param_publish.vec = ahat;
+					param_publish.x = curr_state.x;
+					param_publish.y = curr_state.y;
+					ahat_pub.publish(param_publish);
+				}
 			}
 
 			// update the filter variables

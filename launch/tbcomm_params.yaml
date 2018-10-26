@@ -31,8 +31,8 @@
 /adaptation/alpha: 1.0
 /adaptation/gain1: 2
 /adaptation/gain2: 1 # gain for the consensus protocol
-/adaptation/consensus_protocol_on: 0
-/adaptation/modified_consensus: 0
+/adaptation/consensus_protocol_on: 1
+/adaptation/modified_consensus: 1
 #
 # parameters specific to l2 optimization
 /l2/gain1: 1e-30
